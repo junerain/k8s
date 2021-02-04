@@ -1,0 +1,201 @@
+Module 2 - Deploy an app
+
+
+ kubectl version
+
+
+ kubectl get nodes  ##查看集群节点
+
+
+ kubectl get nodes --help  ##查看集群节点扩展用法
+
+ ##创建deployment，需要指明名称，app镜像路径
+ kubectl create deployment kubernetes-bootcamp --image=gcr.io/google-samples/kubernetes-bootcamp:v1
+
+
+ #查看deployment
+ kubectl get deployments
+
+ kubectl proxy
+
+
+Module 3 - Explore your app
+
+ kubectl get nodes|deployments|pods - 列出资源
+ kubectl describe - 显示有关资源的详细信息
+ kubectl logs - 打印 pod 和其中容器的日志
+ kubectl exec - 在 pod 中的容器上执行命令
+
+ export POD_NAME=$(kubectl get pods -o go-template --template '{{range .items}}{{.metadata.name}}{{"\n"}}{{end}}')
+ kubectl exec $POD_NAME env
+ kubectl exec -ti $POD_NAME bash #进入指定的pod
+
+ kubectl proxy
+ curl http://localhost:8001/api/v1/namespaces/default/pods/$POD_NAME/proxy/
+
+
+
+Module 4 - Expose your app publicly
+
+    kubectl expose deployment/kubernetes-bootcamp --type="NodePort" --port 8080
+    kubectl expose deployment/hello-node --type="NodePort" --port 8080 ##port为需要暴露的端口
+    kubectl get services
+    kubectl get pods -l run=kubernetes-bootcamp
+    kubectl get services -l run=kubernetes-bootcamp
+    export POD_NAME=$(kubectl get pods -o go-template --template '{{range .items}}{{.metadata.name}}{{"\n"}}{{end}}')
+    echo Name of the Pod: $POD_NAME
+    kubectl describe pods $POD_NAME
+    kubectl get pods -l app=v1
+
+    kubectl label pod $POD_NAME app=v1
+
+    kubectl describe services/hello-node
+    kubectl describe services/kubernetes-bootcamp
+    
+
+    kubectl delete service -l run=kubernetes-bootcamp
+    export NODE_PORT=$(kubectl get services/hello-node -o go-template='{{(index .spec.ports 0).nodePort}}')
+    export NODE_PORT=$(kubectl get services/kubernetes-bootcamp -o go-template='{{(index .spec.ports 0).nodePort}}')
+    echo NODE_PORT=$NODE_PORT
+    curl $(minikube ip):$NODE_PORT  ##删除之后直接访问会失败
+    kubectl exec -ti $POD_NAME -- curl localhost:8080 ##直接进入容器执行,用于验证pod是否启动成功
+
+Module 5 - Scale up your app
+
+    ##查看ReplicaSet数量
+    kubectl get rs
+    kubectl get rs -l app=hello-node
+        ###DESIRED displays the desired number of replicas of the application, which you define when you create the Deployment. This is the desired state.
+        ###CURRENT displays how many replicas are currently running.
+    
+    #缩放应用 及其查看结果
+        ###scale up: 扩容
+        kubectl scale deployments/hello-node --replicas=4
+        kubectl scale deployments/kubernetes-bootcamp --replicas=4
+        kubectl describe services/kubernetes-bootcamp
+        kubectl get rs -l app=hello-node
+            ## ReplicaSet命名规则：
+            ## [DEPLOYMENT-NAME]-[RANDOM-STRING]
+            ## eg: hello-node-5d547bd6f6
+        kubectl get deployment -l  app=hello-node
+        kubectl get pods -l app=hello-node -o wide
+        kubectl describe deployments/kubernetes-bootcamp
+        export NODE_PORT=$(kubectl get services/kubernetes-bootcamp -o go-template='{{(index .spec.ports 0).nodePort}}')
+        kubectl describe deployments/kubernetes-bootcamp
+        curl $(minikube ip):$NODE_PORT
+
+    ### scale down 缩容
+        kubectl scale deployments/kubernetes-bootcamp --replicas=2
+        kubectl get deployments
+        kubectl get po -o wide
+
+Module 6 - Update your app
+    ## 滚动更新（pod的ip地址会发生变化） （会新建一个replicaset？？？）
+    kubectl get deployments
+    kubectl get pods
+    kubectl describe pods
+    kubectl describe services/kubernetes-bootcamp
+    export NODE_PORT=$(kubectl get services/kubernetes-bootcamp -o go-template='{{(index .spec.ports 0).nodePort}}')
+    echo NODE_PORT=$NODE_PORT
+    curl $(minikube ip):$NODE_PORT
+    ## kubectl set image deployments/kubernetes-bootcamp kubernetes-bootcamp=jocatalin/kubernetes-bootcamp:v2
+    ##docker.io/zhangguanzhang/gcr.io.google-samples.kubernetes-bootcamp:v1
+    kubectl describe deployments/kubernetes-bootcamp
+    kubectl set image deployments/kubernetes-bootcamp gcr-io-google-samples-kubernetes-bootcamp-ck2rh=jocatalin/kubernetes-bootcamp:v2
+    ## 查看状态
+    kubectl rollout status deployments/kubernetes-bootcamp
+    ## 回滚
+    kubectl rollout undo deployments/kubernetes-bootcamp
+    kubectl describe pods
+    kubectl get pods
+    curl $(minikube ip):$NODE_PORT
+
+配置 java 微服务 Configuring a Kubernetes Microservice Configuring a Java Microservice
+    
+    mvn package -pl system
+    mvn package -pl inventory
+    kubectl apply -f kubernetes.yaml
+    kubectl wait --for=condition=ready pod -l app=inventory
+    kubectl wait --for=condition=ready pod -l app=system
+    curl -u bob:bobpwd http://$( minikube ip ):31000/system/properties
+    curl http://$( minikube ip ):32000/inventory/systems/system-service | grep -i ^X-App-Name:
+    curl -# -I -u bob:bobpwd -D - http://$( minikube ip ):31000/system/properties | grep -i ^X-App-Name:
+
+
+    kubectl create configmap sys-app-name --from-literal name=my-system
+    kubectl create secret generic sys-app-credentials --from-literal username=bob --from-literal password=bobpwd
+    
+    mvn package -pl system
+    mvn package -pl inventory
+    kubectl replace --force -f kubernetes.yaml
+
+    #持续观察
+    kubectl get --watch pods
+    curl -# -I -u bob:bobpwd -D - http://$( minikube ip ):31000/system/properties -o /dev/null
+    curl http://$( minikube ip ):32000/inventory/systems/system-service 
+
+创建redis
+    ##使用以下命令检查创建的对象
+    mkdir pod-redis
+    cd pod-redis 
+    curl -OL https://k8s.io/examples/pods/config/redis-pod.yaml
+    curl -OL https://k8s.io/examples/pods/config/redis-config
+    cat <<EOF >./kustomization.yaml
+    configMapGenerator:
+    - name: example-redis-config
+      files:
+      - redis-config
+    resources:
+    - redis-pod.yaml
+    EOF
+
+    kubectl apply -k .
+    kubectl get -k .
+    
+    kubectl delete pod redis
+
+##image源替换
+curl -s https://zhangguanzhang.github.io/bash/pull.sh | bash -s search gcr.io/google-samples/node-hello:1.0
+
+registry.aliyuncs.com/google_containers/echoserver:1.4
+
+docker.io/zhangguanzhang/gcr.io.google-samples.kubernetes-bootcamp:v1
+
+docker.io/zhangguanzhang/gcr.io.google-samples.node-hello:1.0
+
+
+公开外部 IP 地址以访问集群中应用程序
+    wget https://k8s.io/examples/service/load-balancer-example.yaml
+    修改 load-balancer-example.yaml
+    #- image: gcr.io/google-samples/node-hello:1.0
+    - image: docker.io/zhangguanzhang/gcr.io.google-samples.node-hello:1.0
+    kubectl apply -f https://k8s.io/examples/service/load-balancer-example.yaml
+    kubectl get deployments hello-world
+    kubectl describe deployments hello-world
+    kubectl get replicasets
+    kubectl describe replicasets
+    ##暴露端口
+    kubectl expose deployment hello-world --type=LoadBalancer --name=hello-world
+    kubectl get services hello-world
+    kubectl describe services hello-world
+    curl http://<external-ip>:<port>
+    export NODE_PORT=$(kubectl get services/hello-world -o go-template='{{(index .spec.ports 0).nodePort}}')
+    echo NODE_PORT=$NODE_PORT
+
+    ##minikube 使用情况：
+    minikube service hello-world
+
+    curl $(minikube ip):$NODE_PORT
+
+    ##清除
+    kubectl delete services hello-world
+    kubectl delete deployment hello-world
+
+    
+
+
+
+
+
+
+
