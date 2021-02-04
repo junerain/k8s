@@ -1,3 +1,10 @@
+安装minikube
+    curl -Lo minikube https://kubernetes.oss-cn-hangzhou.aliyuncs.com/minikube/releases/v1.16.0/minikube-linux-amd64 && chmod +x minikube && sudo mv minikube /usr/local/bin/
+    minikube start --driver=docker --image-mirror-country cn 
+
+
+
+
 Module 2 - Deploy an app
 
 
@@ -164,6 +171,9 @@ docker.io/zhangguanzhang/gcr.io.google-samples.kubernetes-bootcamp:v1
 docker.io/zhangguanzhang/gcr.io.google-samples.node-hello:1.0
 
 
+只需要将 k8s.gcr.io 换成 registry.aliyuncs.com/google_containers 即可使用阿里云镜像进行下载
+
+
 公开外部 IP 地址以访问集群中应用程序
     wget https://k8s.io/examples/service/load-balancer-example.yaml
     修改 load-balancer-example.yaml
@@ -191,7 +201,60 @@ docker.io/zhangguanzhang/gcr.io.google-samples.node-hello:1.0
     kubectl delete services hello-world
     kubectl delete deployment hello-world
 
-    
+使用 Redis 部署 PHP 留言板应用程序
+    ## 创建主节点
+    wget https://k8s.io/examples/application/guestbook/redis-master-deployment.yaml
+    修改image源
+    将 k8s.gcr.io 换成 registry.aliyuncs.com/google_containers
+    将 k8s.gcr.io/redis:e2e 替换成 forestgun007/redis:e2e
+    kubectl apply -f ./redis-master-deployment.yaml
+    kubectl get pods
+    kubectl get deployments
+    kubectl get pods -l app=redis
+    export POD_NAME=$(kubectl get pods  -l app=redis -o go-template --template '{{range .items}}{{.metadata.name}}{{"\n"}}{{end}}')
+    kubectl logs -f $POD_NAME
+
+    ## 创建主节点服务
+    kubectl apply -f https://k8s.io/examples/application/guestbook/redis-master-service.yaml
+    kubectl get service
+    kubectl describe service -l app=redis
+
+    ## 启动 Redis 从节点
+    wget https://k8s.io/examples/application/guestbook/redis-slave-deployment.yaml
+    修改image源
+    gcr.io/google_samples/gb-redisslave:v3 替换为 dawnsky/gb-redisslave:v3 
+    kubectl apply -f redis-slave-deployment.yaml
+    kubectl get pods
+    ## 创建从节点服务
+    kubectl apply -f https://k8s.io/examples/application/guestbook/redis-slave-service.yaml
+    kubectl get svc
+
+    ## 设置并公开留言板前端
+    wget https://k8s.io/examples/application/guestbook/frontend-deployment.yaml
+    kubectl apply -f frontend-deployment.yaml
+    修改image源
+    gcr.io/google-samples/gb-frontend:v4 替换为forestgun007/google-samples-gb-frontend:v4
+    kubectl get pods -l app=guestbook -l tier=frontend
+
+    kubectl apply -f https://k8s.io/examples/application/guestbook/frontend-service.yaml
+    kubectl get services
+    #显示访问地址
+    minikube service frontend --url
+    查看 iptables -S -t nat
+
+    ## 对前端进行扩容
+    kubectl scale deployment frontend --replicas=5
+    kubectl get pods -l app=guestbook
+    kubectl scale deployment frontend --replicas=2
+
+    ## 清理现场
+    kubectl delete deployment -l app=redis
+    kubectl delete service -l app=redis
+    kubectl delete deployment -l app=guestbook
+    kubectl delete service -l app=guestbook
+
+
+
 
 
 
