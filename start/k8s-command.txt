@@ -2,7 +2,14 @@
     curl -Lo minikube https://kubernetes.oss-cn-hangzhou.aliyuncs.com/minikube/releases/v1.16.0/minikube-linux-amd64 && chmod +x minikube && sudo mv minikube /usr/local/bin/
     minikube start --driver=docker --image-mirror-country cn 
 
-
+安装
+    You can bootstrap a cluster as follows:
+    1. Initializes cluster master node:
+    kubeadm init --apiserver-advertise-address $(hostname -i) --pod-network-cidr 10.5.0.0/16
+    2. Initialize cluster networking:
+    kubectl apply -f https://raw.githubusercontent.com/cloudnativelabs/kube-router/master/daemonset/kubeadm-kuberouter.yaml
+    3. (Optional) Create an nginx deployment:
+    kubectl apply -f https://raw.githubusercontent.com/kubernetes/website/master/content/en/examples/application/nginx-app.yaml
 
 
 Module 2 - Deploy an app
@@ -170,6 +177,8 @@ docker.io/zhangguanzhang/gcr.io.google-samples.kubernetes-bootcamp:v1
 
 docker.io/zhangguanzhang/gcr.io.google-samples.node-hello:1.0
 
+docker.io/zhangguanzhang/gcr.io.google_containers.kube-state-metrics:v1.9.5
+
 
 只需要将 k8s.gcr.io 换成 registry.aliyuncs.com/google_containers 即可使用阿里云镜像进行下载
 
@@ -201,7 +210,7 @@ docker.io/zhangguanzhang/gcr.io.google-samples.node-hello:1.0
     kubectl delete services hello-world
     kubectl delete deployment hello-world
 
-使用 Redis 部署 PHP 留言板应用程序
+示例：使用 Redis 部署 PHP 留言板应用程序
     ## 创建主节点
     wget https://k8s.io/examples/application/guestbook/redis-master-deployment.yaml
     修改image源
@@ -253,12 +262,70 @@ docker.io/zhangguanzhang/gcr.io.google-samples.node-hello:1.0
     kubectl delete deployment -l app=guestbook
     kubectl delete service -l app=guestbook
 
+示例：添加日志和指标到 PHP / Redis Guestbook 案例
+    ###启动用 Redis 部署的 PHP Guestbook 参见上一个示例
+    ## 添加一个集群角色绑定 
+
+    kubectl create clusterrolebinding cluster-admin-binding 
+    --clusterrole=cluster-admin --user=<your email associated with the k8s provider account>
+
+    kubectl create clusterrolebinding cluster-admin-binding --clusterrole=cluster-admin --user=dj
+    kubectl get clusterrolebinding/cluster-admin-binding -o wide
+    结果如下:
+    ```
+    NAME                    ROLE                        AGE   USERS   GROUPS   SERVICEACCOUNTS
+    cluster-admin-binding   ClusterRole/cluster-admin   48s   dj 
+    ```
+    安装 kube-state-metrics
+    git clone https://github.com/kubernetes/kube-state-metrics.git kube-state-metrics
+    
+    deployment.yaml文件的
+    k8s.gcr.io/kube-state-metrics/kube-state-metrics:v2.0.0-beta
+    替换为：
+    docker.io/dayunshan/k8s.gcr.io.kube-state-metrics:v2.0.0-beta
+
+    kubectl apply -f kube-state-metrics/examples/standard
+
+    kubectl get pods --namespace=kube-system -l app.kubernetes.io/name=kube-state-metrics
+
+    git clone https://github.com/elastic/examples.git
+
+    cd examples/beats-k8s-send-anywhere
 
 
+    docker pull kibana:7.10.1
+    docker pull elasticsearch:7.10.1
+
+    docker run  -d --name elasticsearch -p 9200:9200 -p 9300:9300 -e "discovery.type=single-node" elasticsearch:7.10.1
+    查看es容器的ip：docker inspect xxxxx |grep IPAddress
+
+    docker run -d -p 5601:5601 --name kibana -e "elasticsearch_url=http://172.17.0.2:9200" -v /root/kibana.yml:/opt/kibana/config/kibana.yml kibana:7.10.1
+
+    kubectl create secret generic dynamic-logging \
+      --from-file=./ELASTICSEARCH_HOSTS \
+      --from-file=./ELASTICSEARCH_PASSWORD \
+      --from-file=./ELASTICSEARCH_USERNAME \
+      --from-file=./KIBANA_HOST \
+      --namespace=kube-system
+    #文件修改为docker 创建的kibana和es地址
+    部署 Filebeat 
+    kubectl create -f filebeat-kubernetes.yaml
+    kubectl get pods -n kube-system -l k8s-app=filebeat-dynamic
+
+    kubectl apply -f metricbeat-kubernetes.yaml
+    kubectl get pods -n kube-system -l k8s-app=metricbeat
 
 
+    kubectl apply -f packetbeat-kubernetes.yaml
 
 
-
-
+    清理现场
+    kubectl delete deployment -l app=redis
+    kubectl delete service -l app=redis
+    kubectl delete deployment -l app=guestbook
+    kubectl delete service -l app=guestbook
+    kubectl delete -f filebeat-kubernetes.yaml
+    kubectl delete -f metricbeat-kubernetes.yaml
+    kubectl delete -f packetbeat-kubernetes.yaml
+    kubectl delete secret dynamic-logging -n kube-system
 
